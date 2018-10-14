@@ -1,19 +1,5 @@
 function [idx_inside, Angles, MDistSq, cutoff_angle, cutoff_dist, outlier_id, sampleInsidePval, curLbl, idx_filteredOutInfo]=getVarIndexPCMatchNew(Params)
 
-% score_data, 
-% loading_data, 
-% idPCAll, 
-% label_data, 
-% lbl_value_all, 
-% curLblnum, 
-% cutoff_angle, 
-% cutoff_md_quantile,
-% drawfig, 
-% sample_name, 
-% strLabelAll, 
-% showSampleName, 
-% drawOneSigma
-
 
 if isfield(Params, 'score_data')
     score_data = Params.score_data;
@@ -187,23 +173,23 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-curLbl = find( label_data == curLblnum); %label이 curLblnum(1이나 2)인 idx찾기
+curLbl = find( label_data == curLblnum); %find idx where label = curLblnum (1 or 2)
 
 %finding scores expressed in curLbl and idPCAll
 X = [];
 for kk=1:length(idPCAll)
-    X = [X score_data(curLbl,idPCAll(kk))]; %label1에 대응되는 score 데이터의 1열과 2열(상위2개)를 X에 저장
+    X = [X score_data(curLbl,idPCAll(kk))]; % save 1st and 2nd columns of score data relating label 1 to X
 end
 
 %centering the scores and preparing the covariance matrix (CovX)
-Xmean = mean(X,1); %각 열의 평균을 저장
-Xcent = X-repmat(Xmean, size(X,1),1); %X행렬에서 Xmean을 전부 빼줌 (demeaning)
-CovX = Xcent'*Xcent/(size(X,1)-1); %2x2 공분산행렬 생성(변수가 2개니까 2x2)
+Xmean = mean(X,1);
+Xcent = X-repmat(Xmean, size(X,1),1); % demeaning
+CovX = Xcent'*Xcent/(size(X,1)-1); %2x2 covariance matrix
 
 %finding loadings expressed in idPCAll
 current_loading = [];
 for kk=1:length(idPCAll)
-    current_loading = [current_loading loading_data(:,idPCAll(kk))]; %1번째, 2번재의 로딩변수에 대한 로딩벡터만 저장, 1000x2 행렬
+    current_loading = [current_loading loading_data(:,idPCAll(kk))]; % save loading vetors of 1st and 2nd loading variables, 1000x2 matrix
 end
 
 %computing distances between loadings and scores
@@ -220,9 +206,8 @@ if (useMahal == true)
     if size(X,1) <= size(X,2)
         MDistSq = Eucldistance(loading_data_center(:,:)', mean(X,1)');
     else
-        MDistSq = mahal(loading_data_center,X); %size(X,1)=14, size(X,2)=2 이므로 mahal 쓰게 됨, 1000x1인 이유는 score들을 하나의 cluster로 보고 로딩과의 거리를 계산해서임
+        MDistSq = mahal(loading_data_center,X); 
     end
-    %Sky: temporary 
     %MDistSq = Eucldistance(loading_data_center(:,:)', mean(X,1)');
 else
     InvCox = CovX^(-1);
@@ -233,11 +218,11 @@ else
 end
 
 
-%computing an angle between the centeroid(집합의 중심) and each of loadings
+%computing an angle between the centeroid and each of loadings
 Angles = zeros(size(current_loading,1),1);
 XmeanNorm = Xmean / norm(Xmean);
 for kk=1:size(current_loading,1)
-    Angles(kk) = acos(sum(XmeanNorm.*current_loading(kk,:))/norm(current_loading(kk,:))); %1000x1의 각 로딩과 중심(로딩평균)사이의 역코사인 값을 구함, 범위는 0~3.14
+    Angles(kk) = acos(sum(XmeanNorm.*current_loading(kk,:))/norm(current_loading(kk,:))); % calculate arccos between each loading and average of loadings, 1000x1,range is 0 to 3.14
 end
 
 
@@ -251,7 +236,7 @@ if (useMahal == true)
     if size(X,1) <= size(X,2)
         MDistSqX = Eucldistance(X(:,:)', mean(X,1)');
     else
-        MDistSqX = mahal(X,X); %테스트 중인 label을 하나의 cluster로 해서 중심을 구하고 각 score마다 그 중심과의 거리를 구해줘서 14x1
+        MDistSqX = mahal(X,X); 
         %(X(1,:)-Xmean)*InvCox*(X(1,:)-Xmean)' - mahal(X(1,:),X)
     end    
 else
@@ -264,8 +249,7 @@ end
 
 
 %id_X_within = find( sqrt(MDistSqX) < siglev ); %no longer used
-%Sky: temporary using chi-square distribution
-id_X_within = find( MDistSqX < chi2inv(1-alpha,length(idPCAll)) );  %유의 수준 내에 있는 테스트되는 label의 스코어들만 찾음
+id_X_within = find( MDistSqX < chi2inv(1-alpha,length(idPCAll)) );  
 %we can use this as a way of outliers detection: Applied Multivariate
 %Statistical Analysis 6th Edition, p 459.
 %Let us record chi2cdf(dist,length(idPCAll))
@@ -275,18 +259,17 @@ id_X_within = find( MDistSqX < chi2inv(1-alpha,length(idPCAll)) );  %유의 수준 �
 %since \bar{x} is replaced by x (n=1). This is how MATLAB implements it.
 
 
-id_X_outside = find( MDistSqX >= chi2inv(1-alpha,length(idPCAll)) ); %유의 수준 밖에 있는 테스트되는 label의 스코어들만 찾음
-outlier_id = curLbl(id_X_outside); %outlier의 label ID를 찾아내어 저장함(위의 것은 단순한 순서이므로)
-sampleInsidePval = 1-chi2cdf(MDistSqX, length(idPCAll)); %모든 테스트되는 label의 스코어사이의 거리에 대해 p-value구함
+id_X_outside = find( MDistSqX >= chi2inv(1-alpha,length(idPCAll)) ); % find scores of labels that are tested and outside of CI
+outlier_id = curLbl(id_X_outside); 
+sampleInsidePval = 1-chi2cdf(MDistSqX, length(idPCAll)); % calculate  p-values of distance between label and score that are tested
 
 Angles_score_within = zeros(length(id_X_within),1);
 for kk=1:length(id_X_within)
-    Angles_score_within(kk) = acos(sum(XmeanNorm.*X(id_X_within(kk),:))/norm(X(id_X_within(kk),:))); %14x1의 각 스코어와 중심(스코어평균)사이의 역코사인 값을 구함, 범위는 0~3.14
+    Angles_score_within(kk) = acos(sum(XmeanNorm.*X(id_X_within(kk),:))/norm(X(id_X_within(kk),:))); 
 end
 
 %fstat = (size(X,1)- size(X,2))/(size(X,1)-1)/size(X,2)*size(X,1)*mahal(X,X); %~ F_{p,n-p} = F_{size(X,2), size(X,1) - size(X,2)}
-cutoff_angle = max(Angles_score_within) * 180 / pi; %위에서 구한 것의 최대값을 각도로 변환 해줌
-%Sky: temporary
+cutoff_angle = max(Angles_score_within) * 180 / pi; % convert the max of the above to angle
 %cutoff_angle = 30;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
